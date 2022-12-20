@@ -1,0 +1,27 @@
+version: 0.2
+
+
+phases:
+  build:
+    commands:
+      - |
+        #!/bin/bash
+        if [ "$Var" = "True" ]; then
+          aws lambda get-function --function-name  ${Environment}-${ClientID}-lambda-update-canary > outputCommand.txt
+          var=$(grep "FunctionArn" outputCommand.txt)
+          var2=$(echo $var | cut -d ' ' -f 2)
+          var3="            \"LambdaFunctionArn\": "
+          var4="$var3$var2"
+          sed -i "5s/.*/$var4/" "notification-config.json"
+          cat notification-config.json
+          aws lambda remove-permission --function-name ${Environment}-${ClientID}-lambda-update-canary --statement-id updateCanary
+          aws lambda add-permission --function-name ${Environment}-${ClientID}-lambda-update-canary --action lambda:InvokeFunction --principal s3.amazonaws.com --source-arn arn:aws:s3:::${Environment}-canary-scripts-${ClientID}-tekchoice-com --statement-id updateCanary
+          aws s3api put-bucket-notification-configuration --bucket ${Environment}-canary-scripts-${ClientID}-tekchoice-com	--notification-configuration file://notification-config.json
+        else
+          sam build
+          aws cloudformation package --template .aws-sam/build/template.yaml --s3-bucket ${Environment}-codepipeline.${ClientID}.tekchoice.com --output-template packaged-update-canary-template.yaml
+        fi
+artifacts:
+  type: zip
+  files:
+    - packaged-update-canary-template.yaml
